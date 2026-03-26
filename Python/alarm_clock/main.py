@@ -1,9 +1,9 @@
 import time
-import subprocess
 import sys
 import threading
 import queue
 import re
+import curses
 
 """
 mytime = time.time()
@@ -53,7 +53,16 @@ def get_input(inputQueue):
 
 
 def main():
-    clear_screen()
+    """# init screen
+    scr = curses.initscr()
+
+    # disable echoing stdin
+    curses.noecho()
+
+    # enable non-blocking mode
+    curses.cbreak()"""
+
+
     prevTime = time.strftime("%H:%M",time.gmtime())
     currentTime = time.strftime("%H:%M",time.gmtime())
     cmd = ""
@@ -101,15 +110,13 @@ def main():
                     move_cursor_to(1,2)
                     print("Enter alarm time: ")
                 input_thread.start()
+    
 
+    curses.nocbreak()
+    curses.echo()
+    curses.curs_set(1)
+    curses.endwin()
 
-
-
-
-        
-
-
-        
 
 if __name__ == "__main__":
     sys.exit(main())
