@@ -1,6 +1,5 @@
 import time
 import sys
-import threading
 import queue
 import re
 import curses
@@ -26,98 +25,97 @@ while 1 > 0:
 
 """
 
-console_lock = threading.Lock()
+def clear_eol(y: int, x: int, scr: curses.window) -> None:
+    scr.move(y,x)
+    scr.clrtoeol()
 
-def clear_screen():
-    sys.stdout.write("\033[2J\033[H")
-    sys.stdout.flush()
-
-def move_cursor_to(x,y):
-    sys.stdout.write(f"\033[{y};{x}H")
-    sys.stdout.flush()
-
-def update_current_time(prevTime,currentTime):
+def update_current_time(prevTime: str, currentTime: str, scr: curses.window) -> None:
     if currentTime != prevTime:
-        with console_lock:
-            move_cursor_to(15,0)
-            print(currentTime,end="")
-            prevTime = currentTime 
+        scr.addstr(0,14,currentTime)
+        prevTime = currentTime 
     
-def get_input(inputQueue):
-    cmd = input()
-    inputQueue.put(cmd)
-    with console_lock:
-        move_cursor_to(1,3)
-        print(f"Alarm set for: {cmd}",end="")
+def get_input(cmd: str,inputQueue: queue.Queue,scr: curses.window) -> str:
+    ch = scr.getch()
+    if ch == curses.KEY_BACKSPACE or ch == 127:
+        cmd = cmd[:-1]
+        clear_eol(1,18,scr)
+        scr.addstr(1,18,cmd)
+        return cmd
+    elif ch == curses.KEY_ENTER or ch == 10:
+        inputQueue.put(cmd)
+        clear_eol(1,18,scr)
+        return cmd
+    elif ch != curses.ERR and ch != -1:
+        cmd += chr(ch)
+        scr.addstr(1,18,cmd)
+        return cmd
+    else:
+        return cmd
 
 
 
-def main():
-    """# init screen
-    scr = curses.initscr()
+def main(scr) -> None:
 
-    # disable echoing stdin
-    curses.noecho()
+    curses.assume_default_colors(-1,-1)
 
-    # enable non-blocking mode
-    curses.cbreak()"""
+    # set cursor to be invis
+    curses.curs_set(0)
 
+    scr.nodelay(True)
 
     prevTime = time.strftime("%H:%M",time.gmtime())
     currentTime = time.strftime("%H:%M",time.gmtime())
     cmd = ""
     alarmTime = ""
-    alarmTimeFormat = r'^\d{2}:\d{2}$'
+    alarmTimeFormat = r'^\b(?:[01]\d|2[0-3]):[0-5]\d\b'
     inputQueue = queue.Queue()
 
-    input_thread = threading.Thread(target=get_input,args=[inputQueue])
+    scr.addstr(0,0,f"Current Time: {prevTime}")
+    scr.addstr(1,0,"Enter alarm time: ")
 
-
-    with console_lock:
-        move_cursor_to(1,1)
-        sys.stdout.write(f"Current Time: {prevTime}")
-        move_cursor_to(1,2)
-        sys.stdout.write("Enter alarm time: ")
-
-    input_thread.start()
+    scr.refresh()
 
     while True:
         currentTime = time.strftime("%H:%M",time.gmtime())
-        update_current_time(prevTime,currentTime)
+        update_current_time(prevTime,currentTime,scr)
 
         if currentTime == alarmTime:
-            with console_lock:
-                move_cursor_to(1,3)
-                print("Alarm!!!")
+            scr.addstr(3,0,"Alarm!!!")
+            alarmTime = ""
+
+        cmd = get_input(cmd,inputQueue,scr)
+        
+        scr.refresh()
 
         if not inputQueue.empty():
 
-            input_thread.join()
             cmd = inputQueue.get()
 
             if cmd == "quit" or cmd == "exit":
                 break
 
+            if cmd == "snooze":
+                clear_eol(3,0,scr)
+                clear_eol(2,0,scr)
+
             if re.fullmatch(alarmTimeFormat,cmd):
 
                 alarmTime = cmd
-
-                with console_lock:
-                    move_cursor_to(1,3)
-                    print(f"Alarm set for: {alarmTime}")
+                clear_eol(2,0,scr)
+                scr.addstr(2,0,f"Alarm set for: {alarmTime}")
+                clear_eol(3,0,scr)
             else:
-                with console_lock:
-                    move_cursor_to(1,2)
-                    print("Enter alarm time: ")
-                input_thread.start()
+                scr.addstr(1,0,"Enter alarm time: ")
     
+            cmd = ""
 
-    curses.nocbreak()
+    curses.raw()
     curses.echo()
+    curses.nocbreak()
     curses.curs_set(1)
     curses.endwin()
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    curses.wrapper(main)
 
